@@ -1,7 +1,7 @@
 {
   "name": "istanbul-assistant",
   "image": "mcr.microsoft.com/devcontainers/python:3.12",
-  "postCreateCommand": "if [ -f requirements.txt ]; then pip3 install -r requirements.txt; fi",
+  "postCreateCommand": "echo 'DEVCONTAINER_OK' && if [ -f requirements.txt ]; then pip3 install -r requirements.txt; fi",
   "customizations": {
     "vscode": {
       "settings": {
