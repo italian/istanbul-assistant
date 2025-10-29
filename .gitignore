@@ -1,0 +1,4 @@
+venv/
+.env
+__pycache__/
+docs/istanbul_bot_full_guide.md
