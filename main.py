@@ -2,6 +2,7 @@ import os
 import time
 import logging
 import asyncio
+from typing import Optional
 import httpx
 from dotenv import load_dotenv
 from telegram import Update
@@ -22,7 +23,15 @@ logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=lo
 
 CACHE_TTL = 120  # seconds
 _cache = {'rates': None, 'rates_time': 0, 'weather': None, 'weather_time': 0}
-_cache_lock = asyncio.Lock()
+_cache_lock: Optional[asyncio.Lock] = None
+
+
+def _get_cache_lock() -> asyncio.Lock:
+    """Lazily create the cache lock once the event loop is running."""
+    global _cache_lock
+    if _cache_lock is None:
+        _cache_lock = asyncio.Lock()
+    return _cache_lock
 
 
 async def _send_text(update: Update, text: str, **kwargs) -> None:
@@ -43,7 +52,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
 async def get_currency(update: Update, context: ContextTypes.DEFAULT_TYPE):
     now = time.time()
-    async with _cache_lock:
+    async with _get_cache_lock():
         cached_rates = _cache['rates']
         cached_time = _cache['rates_time']
 
@@ -66,7 +75,7 @@ async def get_currency(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             rates = {'usd_try': usd_try, 'eur_try': eur_try, 'try_rub': try_rub}
             rates_time = time.time()
-            async with _cache_lock:
+            async with _get_cache_lock():
                 _cache['rates'] = rates
                 _cache['rates_time'] = rates_time
         except Exception as e:
@@ -83,7 +92,7 @@ async def get_currency(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def get_weather(update: Update, context: ContextTypes.DEFAULT_TYPE):
     now = time.time()
-    async with _cache_lock:
+    async with _get_cache_lock():
         cached_weather = _cache['weather']
         cached_time = _cache['weather_time']
 
@@ -97,7 +106,7 @@ async def get_weather(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 resp = await client.get(url)
                 resp.raise_for_status()
             data = resp.json()
-            async with _cache_lock:
+            async with _get_cache_lock():
                 _cache['weather'] = data
                 _cache['weather_time'] = time.time()
         except Exception as e:
