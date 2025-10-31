@@ -35,33 +35,43 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def get_currency(update: Update, context: ContextTypes.DEFAULT_TYPE):
     async with _cache_lock:
         if _cache['rates'] and time.time() - _cache['rates_time'] < CACHE_TTL:
-            rates = _cache['rates']
+            rates_payload = _cache['rates']
         else:
             try:
                 async with httpx.AsyncClient(timeout=5.0) as client:
-                    usd = await client.get(f"https://v6.exchangerate-api.com/v6/{EXCHANGE_KEY}/latest/USD")
-                    eur = await client.get(f"https://v6.exchangerate-api.com/v6/{EXCHANGE_KEY}/latest/EUR")
-                    lira = await client.get(f"https://v6.exchangerate-api.com/v6/{EXCHANGE_KEY}/latest/TRY")
-                    usd.raise_for_status()
-                    eur.raise_for_status()
-                    lira.raise_for_status()
+                    response = await client.get(
+                        f"https://v6.exchangerate-api.com/v6/{EXCHANGE_KEY}/latest/USD"
+                    )
+                    response.raise_for_status()
 
-                usd_try = usd.json()['conversion_rates']['TRY']
-                eur_try = eur.json()['conversion_rates']['TRY']
-                try_rub = lira.json()['conversion_rates']['RUB']
+                payload = response.json()
+                conversion = payload['conversion_rates']
+                computed_rates = {
+                    'usd_try': conversion['TRY'],
+                    'eur_try': conversion['TRY'] / conversion['EUR'],
+                    'try_rub': conversion['RUB'] / conversion['TRY'],
+                }
+                rates_payload = {
+                    'base': payload.get('base_code', 'USD'),
+                    'updated': payload.get('time_last_update_utc'),
+                    'computed': computed_rates,
+                }
 
-                rates = {'usd_try': usd_try, 'eur_try': eur_try, 'try_rub': try_rub}
-                _cache['rates'] = rates
+                _cache['rates'] = rates_payload
                 _cache['rates_time'] = time.time()
             except Exception as e:
                 logging.exception("Ошибка получения курса валют: %s", e)
                 await update.message.reply_text("Не удалось получить курс валют. Попробуй позже.")
                 return
-            
-    message = (f"💱 Курсы валют (обновленно {time.strftime('%H:%M:%S', time.gmtime())} UTC):\n"
-               f"1 USD = {rates['usd_try']:.2f} TRY\n"
-               f"1 EUR = {rates['eur_try']:.2f} TRY\n"
-               f"1 TRY = {rates['try_rub']:.2f} RUB")
+
+    computed = rates_payload['computed']
+    updated = rates_payload.get('updated') or time.strftime('%H:%M:%S UTC', time.gmtime())
+    message = (
+        "💱 Курсы валют (обновлено {}):\n".format(updated)
+        + f"1 USD = {computed['usd_try']:.2f} TRY\n"
+        + f"1 EUR = {computed['eur_try']:.2f} TRY\n"
+        + f"1 TRY = {computed['try_rub']:.2f} RUB"
+    )
     await update.message.reply_text(message)
 
 async def get_weather(update: Update, context: ContextTypes.DEFAULT_TYPE):
